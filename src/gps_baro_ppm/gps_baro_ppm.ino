@@ -26,14 +26,13 @@ SoftwareSerial nss(GPS_RX_INDEX, GPS_TX_INDEX);
 static void gpsdump(TinyGPS &gps);
 static bool feedgps();
 static void print_float(float val, float invalid, int len, int prec);
-static void print_int(unsigned long val, unsigned long invalid, int len);
-static void print_date(TinyGPS &gps);
-static void print_str(const char *str, int len);
 
 volatile uint32_t ulCounter = 0;
 
 
 void setup() {
+  nss.begin(57600);
+
   Serial.begin(115200);
   if (!bmp.begin()) {
     Serial.println("Could not find a valid BMP085 sensor, check wiring!");
@@ -50,7 +49,6 @@ void setup() {
   CRCArduinoFastServos::begin();
   CRCArduinoPPMChannels::begin();
 
-  nss.begin(57600);
 }
 
 void loop() {
@@ -58,7 +56,7 @@ void loop() {
   unsigned long start = millis();
   
   // Every second we print an update
-  while (millis() - start < 1000)
+  while (millis() - start < 100)
   {
     if (feedgps())
       newdata = true;
@@ -66,31 +64,20 @@ void loop() {
   
   gpsdump(gps);
   bmpdump(bmp);
+  ppmdump();
+  Serial.print("\n");
+}
 
-
+static void ppmdump() {    
   uint16_t rollIn =  CRCArduinoPPMChannels::getChannel(SERVO_ROLL);
-  if(rollIn)
-  {
-    //CRCArduinoFastServos::writeMicroseconds(SERVO_ROLL,rollIn);
-    Serial.print("SERVO_ROLL ");
-    Serial.println(rollIn);
-  }
-
   uint16_t pitchIn =  CRCArduinoPPMChannels::getChannel(SERVO_PITCH);
-  if(pitchIn)
-  {
-    //CRCArduinoFastServos::writeMicroseconds(SERVO_PITCH,pitchIn);
-    Serial.print("SERVO_PITCH ");
-    Serial.println(pitchIn);
-  }
-
   uint16_t throttleIn =  CRCArduinoPPMChannels::getChannel(SERVO_THROTTLE);
-  if(throttleIn)
-  {
-    //CRCArduinoFastServos::writeMicroseconds(SERVO_THROTTLE,throttleIn);
-    Serial.print("SERVO_THROTTLE ");
-    Serial.println(throttleIn);
-  }
+  Serial.print(rollIn);
+  Serial.print("\t");
+  Serial.print(pitchIn);
+  Serial.print("\t");
+  Serial.print(throttleIn);
+  Serial.print("\t");
 }
 
 static bool feedgps()
@@ -114,8 +101,6 @@ static void gpsdump(TinyGPS &gps)
   print_float(flat, TinyGPS::GPS_INVALID_F_ANGLE, 9, 5);
   print_float(flon, TinyGPS::GPS_INVALID_F_ANGLE, 10, 5);
   print_float(gps.f_altitude(), TinyGPS::GPS_INVALID_F_ALTITUDE, 8, 2);
-  
-  Serial.println();
 }
 
 static void print_float(float val, float invalid, int len, int prec)
@@ -123,40 +108,23 @@ static void print_float(float val, float invalid, int len, int prec)
   char sz[32];
   if (val == invalid)
   {
-    strcpy(sz, "*******");
-    sz[len] = 0;
-        if (len > 0) 
-          sz[len-1] = ' ';
-    for (int i=7; i<len; ++i)
-        sz[i] = ' ';
-    Serial.print(sz);
+    val = 0.0;
   }
-  else
-  {
-    Serial.print(val, prec);
-    int vi = abs((int)val);
-    int flen = prec + (val < 0.0 ? 2 : 1);
-    flen += vi >= 1000 ? 4 : vi >= 100 ? 3 : vi >= 10 ? 2 : 1;
-    for (int i=flen; i<len; ++i)
-      Serial.print(" ");
-  }
+  
+  Serial.print(val, prec);
+  Serial.print("\t");  
   feedgps();
 }
 
-static void bmpdump(Adafruit_BMP085 &bmp) {
-    Serial.print("Temperature = ");
+static void bmpdump(Adafruit_BMP085 &bmp) {    
     Serial.print(bmp.readTemperature());
-    Serial.println(" *C");
+    Serial.print("\t");
     
-    Serial.print("Pressure = ");
     Serial.print(bmp.readPressure());
-    Serial.println(" Pa");
+    Serial.print("\t");
 
-    Serial.print("Real altitude = ");
     Serial.print(bmp.readAltitude(101500));
-    Serial.println(" meters");
-    
-    Serial.println();    
+    Serial.print("\t");
 }
 
 /* DB 04/02/2012 REMOVED The interrupt service routine definition here, it clashes with the attachInterrupt in the cpp file */

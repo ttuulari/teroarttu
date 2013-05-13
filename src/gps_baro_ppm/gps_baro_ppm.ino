@@ -19,23 +19,40 @@
 #define GPS_RX_INDEX 3
 #define GPS_TX_INDEX 4
 
+
+// Unions to help float and int to byte conversion
+typedef union {
+    byte b[4];
+    float f;
+} u_f;
+
+typedef union {
+    byte b[2];
+    uint16_t i;
+} u_i;
+
+static void gpsdump(TinyGPS &gps, u_f* output);
+static void bmpdump(Adafruit_BMP085 &bmp, u_f* output);
+static void ppmdump(u_i* output);
+static void writeFToSerial(u_f* buff, int bufsize);
+static void writeIToSerial(u_i* buff, int bufsize);
+
 Adafruit_BMP085 bmp;
 TinyGPS gps;
 SoftwareSerial nss(GPS_RX_INDEX, GPS_TX_INDEX);
+byte byteRead;
 
-static void gpsdump(TinyGPS &gps);
-static bool feedgps();
-static void print_float(float val, float invalid, int len, int prec);
 
-volatile uint32_t ulCounter = 0;
-
+// Buffers to hold sensor data
+u_f gpsBuffer[3];
+u_f bmpBuffer[1];
+u_i ppmBuffer[3];
 
 void setup() {
   nss.begin(57600);
 
   Serial.begin(115200);
-  if (!bmp.begin()) {
-    Serial.println("Could not find a valid BMP085 sensor, check wiring!");
+  if (!bmp.begin()) {    
     while (1) {}
   }
   CRCArduinoFastServos::attach(SERVO_ROLL,THROTTLE_OUT_PIN);
@@ -48,36 +65,41 @@ void setup() {
 
   CRCArduinoFastServos::begin();
   CRCArduinoPPMChannels::begin();
-
 }
+
+
+unsigned long start = millis();
 
 void loop() {
-  bool newdata = false;
-  unsigned long start = millis();
-  
-  // Every second we print an update
-  while (millis() - start < 100)
-  {
-    if (feedgps())
-      newdata = true;
+  unsigned long newmillis = millis();
+  if (newmillis - start > 1000) {
+    feedgps();
+    start = newmillis;
   }
   
-  gpsdump(gps);
-  bmpdump(bmp);
-  ppmdump();
-  Serial.print("\n");
+  gpsdump(gps, gpsBuffer);
+  bmpdump(bmp, bmpBuffer);
+  ppmdump(ppmBuffer);
+  
+  writeFToSerial(gpsBuffer, 3);
+  writeFToSerial(bmpBuffer, 1);
+  writeIToSerial(ppmBuffer, 3);
 }
 
-static void ppmdump() {    
-  uint16_t rollIn =  CRCArduinoPPMChannels::getChannel(SERVO_ROLL);
-  uint16_t pitchIn =  CRCArduinoPPMChannels::getChannel(SERVO_PITCH);
-  uint16_t throttleIn =  CRCArduinoPPMChannels::getChannel(SERVO_THROTTLE);
-  Serial.print(rollIn);
-  Serial.print("\t");
-  Serial.print(pitchIn);
-  Serial.print("\t");
-  Serial.print(throttleIn);
-  Serial.print("\t");
+static void writeFToSerial(u_f* buff, int bufsize) {
+  for(int i = 0; i < bufsize; i++) {
+    Serial.write(buff[i].b[0]);
+    Serial.write(buff[i].b[1]);
+    Serial.write(buff[i].b[2]);
+    Serial.write(buff[i].b[3]);
+  }
+}
+
+static void writeIToSerial(u_i* buff, int bufsize) {
+  for(int i = 0; i < bufsize; i++) {
+    Serial.write(buff[i].b[0]);
+    Serial.write(buff[i].b[1]);
+  }
 }
 
 static bool feedgps()
@@ -90,41 +112,30 @@ static bool feedgps()
   return false;
 }
 
-static void gpsdump(TinyGPS &gps)
-{
-  float flat, flon;
+static void gpsdump(TinyGPS &gps, u_f* output) {
+  float flat, flon, falt;
   unsigned long age, date, time, chars = 0;
-  unsigned short sentences = 0, failed = 0;
-  static const float LONDON_LAT = 51.508131, LONDON_LON = -0.128002;
 
   gps.f_get_position(&flat, &flon, &age);
-  print_float(flat, TinyGPS::GPS_INVALID_F_ANGLE, 9, 5);
-  print_float(flon, TinyGPS::GPS_INVALID_F_ANGLE, 10, 5);
-  print_float(gps.f_altitude(), TinyGPS::GPS_INVALID_F_ALTITUDE, 8, 2);
-}
-
-static void print_float(float val, float invalid, int len, int prec)
-{
-  char sz[32];
-  if (val == invalid)
-  {
-    val = 0.0;
-  }
-  
-  Serial.print(val, prec);
-  Serial.print("\t");  
+  falt = gps.f_altitude();
+  output[0].f = flat;
+  output[1].f = flon;
+  output[2].f = falt;
   feedgps();
 }
 
-static void bmpdump(Adafruit_BMP085 &bmp) {    
-    Serial.print(bmp.readTemperature());
-    Serial.print("\t");
-    
-    Serial.print(bmp.readPressure());
-    Serial.print("\t");
+static void bmpdump(Adafruit_BMP085 &bmp, u_f* output) {    
+  float falt = bmp.readAltitude(101500);
+  output[0].f = falt;
+}
 
-    Serial.print(bmp.readAltitude(101500));
-    Serial.print("\t");
+static void ppmdump(u_i* output) {    
+  uint16_t rollIn =  CRCArduinoPPMChannels::getChannel(SERVO_ROLL);
+  uint16_t pitchIn =  CRCArduinoPPMChannels::getChannel(SERVO_PITCH);
+  uint16_t throttleIn =  CRCArduinoPPMChannels::getChannel(SERVO_THROTTLE);
+  output[0].i = rollIn;
+  output[1].i = pitchIn;
+  output[2].i = throttleIn;
 }
 
 /* DB 04/02/2012 REMOVED The interrupt service routine definition here, it clashes with the attachInterrupt in the cpp file */

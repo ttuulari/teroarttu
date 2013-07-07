@@ -4,9 +4,9 @@
 #include <TinyGPS.h>
 #include <RCArduinoFastLib.h>
 
-#define THROTTLE_OUT_PIN 8
-#define STEERING_OUT_PIN 9
-#define AUX_OUT_PIN 10
+#define ROLL_OUT_PIN 8
+#define PITCH_OUT_PIN 9
+#define THROTTLE_OUT_PIN 10
 #define OTHER_OUT_PIN 11
 
 // Assign servo indexes
@@ -55,9 +55,9 @@ void setup() {
   if (!bmp.begin()) {    
     while (1) {}
   }
-  CRCArduinoFastServos::attach(SERVO_ROLL,THROTTLE_OUT_PIN);
-  CRCArduinoFastServos::attach(SERVO_PITCH,STEERING_OUT_PIN);
-  CRCArduinoFastServos::attach(SERVO_THROTTLE,AUX_OUT_PIN);
+  CRCArduinoFastServos::attach(SERVO_ROLL,ROLL_OUT_PIN);
+  CRCArduinoFastServos::attach(SERVO_PITCH,PITCH_OUT_PIN);
+  CRCArduinoFastServos::attach(SERVO_THROTTLE,THROTTLE_OUT_PIN);
   CRCArduinoFastServos::attach(SERVO_OTHER,OTHER_OUT_PIN);
   
   // lets set a standard rate of 50 Hz by setting a frame space of 10 * 2000 = 3 Servos + 7 times 2000
@@ -136,6 +136,16 @@ static void ppmdump(u_i* output) {
   output[0].i = rollIn;
   output[1].i = pitchIn;
   output[2].i = throttleIn;
+
+  if(rollIn) {
+    CRCArduinoFastServos::writeMicroseconds(SERVO_ROLL, rollIn);    
+  }
+  if(pitchIn) {
+    CRCArduinoFastServos::writeMicroseconds(SERVO_PITCH, pitchIn);
+  }
+  if(throttleIn) {
+    CRCArduinoFastServos::writeMicroseconds(SERVO_THROTTLE, throttleIn);
+  }
 }
 
 /* DB 04/02/2012 REMOVED The interrupt service routine definition here, it clashes with the attachInterrupt in the cpp file */
